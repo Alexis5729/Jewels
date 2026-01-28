@@ -1,0 +1,6 @@
+<resources>
+<string name="app_name">Jewels</string>
+
+<!-- Google Maps API Key -->
+<string name="google_maps_key">AIzaSyDW5YSWomqCZU4Wi0P-MqLITLh3qbS90Ik</string>
+</resources>
