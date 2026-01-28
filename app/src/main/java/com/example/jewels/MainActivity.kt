@@ -12,7 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.room.Room
 import com.example.jewels.data.local.db.AppDatabase
+import com.example.jewels.presentation.navigation.AppScaffold
 import com.example.jewels.ui.theme.JewelsTheme
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.jewels.data.local.entity.BranchEntity
 
 class MainActivity : ComponentActivity() {
 
@@ -47,7 +51,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppRoot(modifier: Modifier = Modifier) {
-    // Luego aquí va Navigation + BottomBar
+    AppScaffold()
 }
 
 @Preview(showBackground = true)
