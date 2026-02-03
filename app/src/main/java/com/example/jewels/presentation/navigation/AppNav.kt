@@ -1,6 +1,9 @@
 package com.example.jewels.presentation.navigation
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
@@ -16,6 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.room.Room
+import com.example.jewels.data.local.entity.ProductEntity
+import com.example.jewels.data.local.entity.ProductStatus
 import com.example.jewels.data.local.db.AppDatabase
 import com.example.jewels.data.local.entity.BranchEntity
 import com.example.jewels.presentation.map.MapViewModel
@@ -23,10 +28,16 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.Marker
+import android.content.Intent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import com.example.jewels.data.local.db.DbProvider
+import com.example.jewels.data.local.entity.ProductPhotoEntity
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import coil.compose.AsyncImage
 import kotlin.toString
 
 
@@ -84,14 +95,7 @@ fun AppScaffold() {
 }
 
 @Composable
-private fun InventoryScreen() = Surface { Text("Inventario (admin)", modifier = Modifier.padding(16.dp)) }
-
-@Composable
-private fun CatalogScreen() = Surface { Text("Catálogo (vitrina)", modifier = Modifier.padding(16.dp)) }
-
-@Composable
-private fun MapScreen() {
-
+private fun InventoryScreen() {
     val context = LocalContext.current
 
     val db = remember {
@@ -99,132 +103,465 @@ private fun MapScreen() {
             context.applicationContext,
             AppDatabase::class.java,
             "jewels_db"
-        )
-            .fallbackToDestructiveMigration()
-            .build()
+        ).fallbackToDestructiveMigration().build()
     }
 
-    val viewModel = remember {
-        MapViewModel(db.branchDao())
-    }
-
-    val branches by viewModel.branches.collectAsState()
-
-    var showForm by remember { mutableStateOf(false) }
-
+    val dao = remember { db.productDao() }
     val scope = rememberCoroutineScope()
 
-    var pickedLatLng by remember { mutableStateOf<LatLng?>(null) }
+    val products by dao.observeAll().collectAsState(initial = emptyList())
+    var selectedProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var showAdd by remember { mutableStateOf(false) }
 
+    Box(Modifier.fillMaxSize()) {
 
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(
-            LatLng(-33.45, -70.66),
-            11f
-        )
-    }
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Text("Inventario", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(12.dp))
 
-    Box(modifier = Modifier.fillMaxSize()) {
+            // (Debug opcional)
+            // Text("Productos: ${products.size}")
+            // Spacer(Modifier.height(8.dp))
 
-        // MAPA
-        GoogleMap(
-            modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraPositionState,
-            onMapClick = { latLng ->
-                pickedLatLng = latLng
-                showForm = true
-            }
-
-        ) {
-            branches.forEach { branch ->
-                Marker(
-                    state = MarkerState(
-                        LatLng(branch.lat, branch.lng)
-                    ),
-                    title = branch.name,
-                    snippet = branch.address
-                )
-            }
-        }
-
-        // BOTÓN +
-        FloatingActionButton(
-            onClick = { showForm = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Agregar sucursal")
-        }
-
-        // FORMULARIO
-        if (showForm) {
-            AddBranchDialog(
-                initialLatLng = pickedLatLng,
-                onDismiss = {
-                    showForm = false
-                    pickedLatLng = null
-                },
-                onSave = { branch ->
-                    scope.launch(Dispatchers.IO) {
-                        db.branchDao().insert(branch)
+            if (products.isEmpty()) {
+                Text("Aún no hay productos. Toca + para agregar.")
+            } else {
+                LazyColumn {
+                    items(products, key = { it.id }) { p ->
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp)
+                                .clickable { selectedProduct = p }
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(p.name, style = MaterialTheme.typography.titleMedium)
+                                Text("Precio: $${p.priceClp} CLP")
+                                Text("Stock: ${p.stock}")
+                                Text(
+                                    if (p.status == ProductStatus.AVAILABLE)
+                                        "Estado: Disponible"
+                                    else
+                                        "Estado: Agotado"
+                                )
+                            }
+                        }
                     }
-                    showForm = false
-                    pickedLatLng = null
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick = { showAdd = true },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = "Agregar producto")
+        }
+
+        if (showAdd) {
+            AddProductDialog(
+                onDismiss = { showAdd = false },
+                onSave = { product ->
+                    scope.launch(Dispatchers.IO) { dao.insert(product) }
+                    showAdd = false
+                }
+            )
+        }
+
+        if (selectedProduct != null) {
+            EditProductDialog(
+                product = selectedProduct!!,
+                onDismiss = { selectedProduct = null },
+                onSave = { updated ->
+                    scope.launch(Dispatchers.IO) {
+                        dao.update(updated.copy(updatedAt = System.currentTimeMillis()))
+                    }
+                    selectedProduct = null
+                },
+                onDelete = { prod ->
+                    scope.launch(Dispatchers.IO) { dao.delete(prod) }
+                    selectedProduct = null
                 }
             )
         }
     }
 }
 
+    private enum class CatalogFilter { ALL, AVAILABLE, SOLD_OUT }
+
+    @Composable
+    private fun CatalogScreen() {
+        val context = LocalContext.current
+
+        val db = remember {
+            Room.databaseBuilder(
+                context.applicationContext,
+                AppDatabase::class.java,
+                "jewels_db"
+            ).fallbackToDestructiveMigration().build()
+        }
+
+        val dao = remember { db.productDao() }
+
+        var filter by remember { mutableStateOf(CatalogFilter.ALL) }
+
+        val products by when (filter) {
+            CatalogFilter.ALL -> dao.observeAll().collectAsState(initial = emptyList())
+            CatalogFilter.AVAILABLE -> dao.observeByStatus(ProductStatus.AVAILABLE)
+                .collectAsState(initial = emptyList())
+
+            CatalogFilter.SOLD_OUT -> dao.observeByStatus(ProductStatus.SOLD_OUT)
+                .collectAsState(initial = emptyList())
+        }
+
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
+
+            Text("Catálogo", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(12.dp))
+
+            // Filtro
+            SingleChoiceSegmentedButtonRow {
+                SegmentedButton(
+                    selected = filter == CatalogFilter.ALL,
+                    onClick = { filter = CatalogFilter.ALL },
+                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
+                ) { Text("Todos") }
+
+                SegmentedButton(
+                    selected = filter == CatalogFilter.AVAILABLE,
+                    onClick = { filter = CatalogFilter.AVAILABLE },
+                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
+                ) { Text("Disponibles") }
+
+                SegmentedButton(
+                    selected = filter == CatalogFilter.SOLD_OUT,
+                    onClick = { filter = CatalogFilter.SOLD_OUT },
+                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+                ) { Text("Agotados") }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            if (products.isEmpty()) {
+                Text("No hay productos para este filtro.")
+            } else {
+                products.forEach { p ->
+                    ElevatedCard(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(p.name, style = MaterialTheme.typography.titleMedium)
+                                AssistChip(
+                                    onClick = {},
+                                    label = { Text(if (p.status == ProductStatus.AVAILABLE) "Disponible" else "Agotado") }
+                                )
+                            }
+
+                            if (p.description.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(p.description)
+                            }
+
+                            Spacer(Modifier.height(6.dp))
+                            Text("Precio: $${p.priceClp} CLP")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    private fun MapScreen() {
+
+        val context = LocalContext.current
+
+        val db = remember {
+            Room.databaseBuilder(
+                context.applicationContext,
+                AppDatabase::class.java,
+                "jewels_db"
+            )
+                .fallbackToDestructiveMigration()
+                .build()
+        }
+
+        val viewModel = remember {
+            MapViewModel(db.branchDao())
+        }
+
+        val branches by viewModel.branches.collectAsState()
+
+        var showForm by remember { mutableStateOf(false) }
+
+        val scope = rememberCoroutineScope()
+
+        var pickedLatLng by remember { mutableStateOf<LatLng?>(null) }
+
+
+        val cameraPositionState = rememberCameraPositionState {
+            position = CameraPosition.fromLatLngZoom(
+                LatLng(-33.45, -70.66),
+                11f
+            )
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+
+            // MAPA
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                onMapClick = { latLng ->
+                    pickedLatLng = latLng
+                    showForm = true
+                }
+
+            ) {
+                branches.forEach { branch ->
+                    Marker(
+                        state = MarkerState(
+                            LatLng(branch.lat, branch.lng)
+                        ),
+                        title = branch.name,
+                        snippet = branch.address
+                    )
+                }
+            }
+
+            // BOTÓN +
+            FloatingActionButton(
+                onClick = { showForm = true },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Agregar sucursal")
+            }
+
+            // FORMULARIO
+            if (showForm) {
+                AddBranchDialog(
+                    initialLatLng = pickedLatLng,
+                    onDismiss = {
+                        showForm = false
+                        pickedLatLng = null
+                    },
+                    onSave = { branch ->
+                        scope.launch(Dispatchers.IO) {
+                            db.branchDao().insert(branch)
+                        }
+                        showForm = false
+                        pickedLatLng = null
+                    }
+                )
+            }
+        }
+    }
+
+
+    @Composable
+    private fun ReservationsScreen() =
+        Surface { Text("Reservas / Interesados", modifier = Modifier.padding(16.dp)) }
+
+    @Composable
+    private fun AddBranchDialog(
+        initialLatLng: LatLng?,
+        onDismiss: () -> Unit,
+        onSave: (BranchEntity) -> Unit
+    ) {
+
+        var name by remember { mutableStateOf("") }
+        var address by remember { mutableStateOf("") }
+        var lat by remember { mutableStateOf(initialLatLng?.latitude?.toString() ?: "") }
+        var lng by remember { mutableStateOf(initialLatLng?.longitude?.toString() ?: "") }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val latD = lat.toDoubleOrNull()
+                        val lngD = lng.toDoubleOrNull()
+
+                        if (name.isNotBlank() && latD != null && lngD != null) {
+                            onSave(
+                                BranchEntity(
+                                    name = name,
+                                    address = address,
+                                    lat = latD,
+                                    lng = lngD
+                                )
+                            )
+                        }
+                    }
+                ) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancelar")
+                }
+            },
+            title = { Text("Nueva sucursal") },
+
+            text = {
+                Column {
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nombre") }
+                    )
+
+                    OutlinedTextField(
+                        value = address,
+                        onValueChange = { address = it },
+                        label = { Text("Dirección") }
+                    )
+
+                    OutlinedTextField(
+                        value = lat,
+                        onValueChange = { lat = it },
+                        label = { Text("Latitud") }
+                    )
+
+                    OutlinedTextField(
+                        value = lng,
+                        onValueChange = { lng = it },
+                        label = { Text("Longitud") }
+                    )
+                }
+            }
+        )
+    }
+
+    @Composable
+    private fun AddProductDialog(
+        onDismiss: () -> Unit,
+        onSave: (ProductEntity) -> Unit
+    ) {
+        var name by remember { mutableStateOf("") }
+        var desc by remember { mutableStateOf("") }
+        var price by remember { mutableStateOf("") }
+        var stock by remember { mutableStateOf("") }
+        var available by remember { mutableStateOf(true) }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Nuevo producto") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Nombre") }
+                    )
+
+                    OutlinedTextField(
+                        value = desc,
+                        onValueChange = { desc = it },
+                        label = { Text("Descripción") }
+                    )
+
+                    OutlinedTextField(
+                        value = price,
+                        onValueChange = { price = it.filter { c -> c.isDigit() } },
+                        label = { Text("Precio (CLP)") }
+                    )
+
+                    OutlinedTextField(
+                        value = stock,
+                        onValueChange = { stock = it.filter { c -> c.isDigit() } },
+                        label = { Text("Stock") }
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(
+                            checked = available,
+                            onCheckedChange = { available = it }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (available) "Disponible" else "Agotado")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val priceInt = price.toIntOrNull()
+                        val stockInt = stock.toIntOrNull()
+
+                        if (name.isNotBlank() && priceInt != null && stockInt != null) {
+                            onSave(
+                                ProductEntity(
+                                    name = name,
+                                    description = desc,
+                                    priceClp = priceInt,
+                                    stock = stockInt,
+                                    status = if (available) ProductStatus.AVAILABLE else ProductStatus.SOLD_OUT
+                                )
+                            )
+                        }
+                    }
+                ) { Text("Guardar") }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
+            }
+        )
+    }
 
 @Composable
-private fun ReservationsScreen() = Surface { Text("Reservas / Interesados", modifier = Modifier.padding(16.dp)) }
-
-@Composable
-private fun AddBranchDialog(
-    initialLatLng: LatLng?,
+private fun EditProductDialog(
+    product: ProductEntity,
     onDismiss: () -> Unit,
-    onSave: (BranchEntity) -> Unit
+    onSave: (ProductEntity) -> Unit,
+    onDelete: (ProductEntity) -> Unit
 ) {
+    var name by remember { mutableStateOf(product.name) }
+    var desc by remember { mutableStateOf(product.description) }
+    var price by remember { mutableStateOf(product.priceClp.toString()) }
+    var stock by remember { mutableStateOf(product.stock.toString()) }
+    var available by remember { mutableStateOf(product.status == ProductStatus.AVAILABLE) }
 
-    var name by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var lat by remember { mutableStateOf(initialLatLng?.latitude?.toString() ?: "") }
-    var lng by remember { mutableStateOf(initialLatLng?.longitude?.toString() ?: "") }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    val db = remember { DbProvider.get(context) }
+    val photoDao = remember { db.photoDao() }
+
+    val photos by photoDao.observeByProduct(product.id).collectAsState(initial = emptyList())
+
+    val pickImageLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+
+            scope.launch(Dispatchers.IO) {
+                photoDao.insert(
+                    ProductPhotoEntity(
+                        productId = product.id,
+                        uri = uri.toString()
+                    )
+                )
+            }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val latD = lat.toDoubleOrNull()
-                    val lngD = lng.toDoubleOrNull()
-
-                    if (name.isNotBlank() && latD != null && lngD != null) {
-                        onSave(
-                            BranchEntity(
-                                name = name,
-                                address = address,
-                                lat = latD,
-                                lng = lngD
-                            )
-                        )
-                    }
-                }
-            ) {
-                Text("Guardar")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        },
-        title = { Text("Nueva sucursal") },
-
+        title = { Text("Editar producto") },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
                 OutlinedTextField(
                     value = name,
@@ -233,22 +570,74 @@ private fun AddBranchDialog(
                 )
 
                 OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Dirección") }
+                    value = desc,
+                    onValueChange = { desc = it },
+                    label = { Text("Descripción") }
                 )
 
                 OutlinedTextField(
-                    value = lat,
-                    onValueChange = { lat = it },
-                    label = { Text("Latitud") }
+                    value = price,
+                    onValueChange = { price = it.filter { c -> c.isDigit() } },
+                    label = { Text("Precio (CLP)") }
                 )
 
                 OutlinedTextField(
-                    value = lng,
-                    onValueChange = { lng = it },
-                    label = { Text("Longitud") }
+                    value = stock,
+                    onValueChange = { stock = it.filter { c -> c.isDigit() } },
+                    label = { Text("Stock") }
                 )
+
+                // --- Fotos (preview simple) ---
+                Text("Fotos: ${photos.size}")
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    photos.take(3).forEach { ph ->
+                        AsyncImage(
+                            model = ph.uri,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { pickImageLauncher.launch(arrayOf("image/*")) }
+                ) {
+                    Text("Agregar foto desde galería")
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(checked = available, onCheckedChange = { available = it })
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (available) "Disponible" else "Agotado")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val p = price.toIntOrNull()
+                    val s = stock.toIntOrNull()
+                    if (p != null && s != null && name.isNotBlank()) {
+                        onSave(
+                            product.copy(
+                                name = name,
+                                description = desc,
+                                priceClp = p,
+                                stock = s,
+                                status = if (available) ProductStatus.AVAILABLE else ProductStatus.SOLD_OUT,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+                }
+            ) { Text("Guardar") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onDelete(product) }) { Text("Eliminar") }
+                Spacer(Modifier.width(8.dp))
+                TextButton(onClick = onDismiss) { Text("Cancelar") }
             }
         }
     )
