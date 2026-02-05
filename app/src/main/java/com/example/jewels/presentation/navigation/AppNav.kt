@@ -21,8 +21,11 @@ import androidx.navigation.compose.*
 import androidx.room.Room
 import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductStatus
-import com.example.jewels.data.local.db.AppDatabase
 import com.example.jewels.data.local.entity.BranchEntity
+import com.example.jewels.data.local.entity.InterestEntity
+import com.example.jewels.data.local.entity.InterestStatus
+import androidx.compose.material3.HorizontalDivider
+import com.example.jewels.data.local.db.AppDatabase
 import com.example.jewels.presentation.map.MapViewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -33,11 +36,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.example.jewels.data.local.db.DbProvider
 import com.example.jewels.data.local.entity.ProductPhotoEntity
+import com.example.jewels.data.local.model.ProductWithPhotos
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
+import android.net.Uri
 import kotlin.toString
 
 
@@ -97,53 +102,64 @@ fun AppScaffold() {
 @Composable
 private fun InventoryScreen() {
     val context = LocalContext.current
-
-    val db = remember {
-        Room.databaseBuilder(
-            context.applicationContext,
-            AppDatabase::class.java,
-            "jewels_db"
-        ).fallbackToDestructiveMigration().build()
-    }
-
+    val db = remember { DbProvider.get(context) }   // ✅ misma instancia en toda la app
     val dao = remember { db.productDao() }
     val scope = rememberCoroutineScope()
 
-    val products by dao.observeAll().collectAsState(initial = emptyList())
+    val products by dao.observeAllWithPhotos().collectAsState(initial = emptyList())
     var selectedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var showAdd by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
 
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
             Text("Inventario", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(12.dp))
-
-            // (Debug opcional)
-            // Text("Productos: ${products.size}")
-            // Spacer(Modifier.height(8.dp))
 
             if (products.isEmpty()) {
                 Text("Aún no hay productos. Toca + para agregar.")
             } else {
                 LazyColumn {
-                    items(products, key = { it.id }) { p ->
+                    items(products, key = { it.product.id }) { item ->
+                        val p = item.product
+                        val photos = item.photos
+
                         ElevatedCard(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(bottom = 8.dp)
                                 .clickable { selectedProduct = p }
                         ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(p.name, style = MaterialTheme.typography.titleMedium)
-                                Text("Precio: $${p.priceClp} CLP")
-                                Text("Stock: ${p.stock}")
-                                Text(
-                                    if (p.status == ProductStatus.AVAILABLE)
-                                        "Estado: Disponible"
-                                    else
-                                        "Estado: Agotado"
-                                )
+                            Row(
+                                modifier = Modifier.padding(12.dp), // ✅ padding interno
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                val thumb = photos.firstOrNull()?.uri
+                                if (thumb != null) {
+                                    AsyncImage(
+                                        model = android.net.Uri.parse(thumb),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(56.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                }
+
+                                Column(Modifier.weight(1f)) {
+                                    Text(p.name, style = MaterialTheme.typography.titleMedium)
+                                    Text("Precio: $${p.priceClp} CLP")
+                                    Text("Stock: ${p.stock}")
+                                    Text(
+                                        if (p.status == ProductStatus.AVAILABLE)
+                                            "Estado: Disponible"
+                                        else
+                                            "Estado: Agotado"
+                                    )
+                                    Text("Fotos: ${photos.size}")
+                                }
                             }
                         }
                     }
@@ -153,7 +169,9 @@ private fun InventoryScreen() {
 
         FloatingActionButton(
             onClick = { showAdd = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp)
         ) {
             Icon(Icons.Filled.Add, contentDescription = "Agregar producto")
         }
@@ -168,9 +186,9 @@ private fun InventoryScreen() {
             )
         }
 
-        if (selectedProduct != null) {
+        selectedProduct?.let { selected ->
             EditProductDialog(
-                product = selectedProduct!!,
+                product = selected,
                 onDismiss = { selectedProduct = null },
                 onSave = { updated ->
                     scope.launch(Dispatchers.IO) {
@@ -187,70 +205,93 @@ private fun InventoryScreen() {
     }
 }
 
-    private enum class CatalogFilter { ALL, AVAILABLE, SOLD_OUT }
+private enum class CatalogFilter { ALL, AVAILABLE, SOLD_OUT }
 
-    @Composable
-    private fun CatalogScreen() {
-        val context = LocalContext.current
+@Composable
+private fun CatalogScreen() {
+    val context = LocalContext.current
+    val db = remember { DbProvider.get(context) }   // ✅ misma instancia en toda la app
+    val dao = remember { db.productDao() }
 
-        val db = remember {
-            Room.databaseBuilder(
-                context.applicationContext,
-                AppDatabase::class.java,
-                "jewels_db"
-            ).fallbackToDestructiveMigration().build()
+    val interestDao = remember { db.interestDao() }  // o DbProvider.get(context).interestDao()
+    val scope = rememberCoroutineScope()
+
+    var showInterestDialog by remember { mutableStateOf(false) }
+    var selectedProductId by remember { mutableStateOf<Long?>(null) }
+    var selectedProductName by remember { mutableStateOf("") }
+
+    var filter by remember { mutableStateOf(CatalogFilter.ALL) }
+
+    val products by when (filter) {
+        CatalogFilter.ALL ->
+            dao.observeAllWithPhotos().collectAsState(initial = emptyList())
+
+        CatalogFilter.AVAILABLE ->
+            dao.observeByStatusWithPhotos(ProductStatus.AVAILABLE).collectAsState(initial = emptyList())
+
+        CatalogFilter.SOLD_OUT ->
+            dao.observeByStatusWithPhotos(ProductStatus.SOLD_OUT).collectAsState(initial = emptyList())
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Catálogo", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(12.dp))
+
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = filter == CatalogFilter.ALL,
+                onClick = { filter = CatalogFilter.ALL },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
+            ) { Text("Todos") }
+
+            SegmentedButton(
+                selected = filter == CatalogFilter.AVAILABLE,
+                onClick = { filter = CatalogFilter.AVAILABLE },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
+            ) { Text("Disponibles") }
+
+            SegmentedButton(
+                selected = filter == CatalogFilter.SOLD_OUT,
+                onClick = { filter = CatalogFilter.SOLD_OUT },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
+            ) { Text("Agotados") }
         }
 
-        val dao = remember { db.productDao() }
+        Spacer(Modifier.height(12.dp))
 
-        var filter by remember { mutableStateOf(CatalogFilter.ALL) }
+        if (products.isEmpty()) {
+            Text("No hay productos para este filtro.")
+        } else {
+            products.forEach { item ->
+                val p = item.product
+                val photos = item.photos
+                val thumb = photos.firstOrNull()?.uri
 
-        val products by when (filter) {
-            CatalogFilter.ALL -> dao.observeAll().collectAsState(initial = emptyList())
-            CatalogFilter.AVAILABLE -> dao.observeByStatus(ProductStatus.AVAILABLE)
-                .collectAsState(initial = emptyList())
+                ElevatedCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
 
-            CatalogFilter.SOLD_OUT -> dao.observeByStatus(ProductStatus.SOLD_OUT)
-                .collectAsState(initial = emptyList())
-        }
+                        // Miniatura a la izquierda (si hay)
+                        if (thumb != null) {
+                            AsyncImage(
+                                model = Uri.parse(thumb),
+                                contentDescription = null,
+                                modifier = Modifier.size(56.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                        }
 
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
-
-            Text("Catálogo", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
-
-            // Filtro
-            SingleChoiceSegmentedButtonRow {
-                SegmentedButton(
-                    selected = filter == CatalogFilter.ALL,
-                    onClick = { filter = CatalogFilter.ALL },
-                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3)
-                ) { Text("Todos") }
-
-                SegmentedButton(
-                    selected = filter == CatalogFilter.AVAILABLE,
-                    onClick = { filter = CatalogFilter.AVAILABLE },
-                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
-                ) { Text("Disponibles") }
-
-                SegmentedButton(
-                    selected = filter == CatalogFilter.SOLD_OUT,
-                    onClick = { filter = CatalogFilter.SOLD_OUT },
-                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3)
-                ) { Text("Agotados") }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            if (products.isEmpty()) {
-                Text("No hay productos para este filtro.")
-            } else {
-                products.forEach { p ->
-                    ElevatedCard(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-                        Column(Modifier.padding(12.dp)) {
+                        Column(Modifier.weight(1f)) {
                             Row(
                                 Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(p.name, style = MaterialTheme.typography.titleMedium)
                                 AssistChip(
@@ -269,9 +310,43 @@ private fun InventoryScreen() {
                         }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        selectedProductId = p.id
+                        selectedProductName = p.name
+                        showInterestDialog = true
+                    },
+                    enabled = (p.status == ProductStatus.AVAILABLE)
+                ) {
+                    Text(if (p.status == ProductStatus.AVAILABLE) "Reservar" else "No disponible")
+                }
+
             }
         }
     }
+    if (showInterestDialog && selectedProductId != null) {
+        AddInterestDialog(
+            onDismiss = { showInterestDialog = false },
+            onSave = { name, phone, note ->
+                scope.launch(Dispatchers.IO) {
+                    interestDao.insert(
+                        InterestEntity(
+                            productId = selectedProductId!!,
+                            buyerName = name,
+                            phone = phone,
+                            note = note,
+                            status = InterestStatus.PENDING
+                        )
+                    )
+                }
+                showInterestDialog = false
+            }
+        )
+    }
+
+}
 
     @Composable
     private fun MapScreen() {
@@ -361,11 +436,102 @@ private fun InventoryScreen() {
         }
     }
 
+private enum class InterestFilter { ALL, PENDING, CONTACTED, CLOSED }
+@Composable
+private fun ReservationsScreen() {
+    val context = LocalContext.current
+    val db = remember { DbProvider.get(context) }
+    val interestDao = remember { db.interestDao() }
+    val scope = rememberCoroutineScope()
 
-    @Composable
-    private fun ReservationsScreen() =
-        Surface { Text("Reservas / Interesados", modifier = Modifier.padding(16.dp)) }
+    var filter by remember { mutableStateOf(InterestFilter.ALL) }
 
+    val list by when (filter) {
+        InterestFilter.ALL -> interestDao.observeAllWithProduct().collectAsState(initial = emptyList())
+        InterestFilter.PENDING -> interestDao.observeByStatusWithProduct(InterestStatus.PENDING).collectAsState(initial = emptyList())
+        InterestFilter.CONTACTED -> interestDao.observeByStatusWithProduct(InterestStatus.CONTACTED).collectAsState(initial = emptyList())
+        InterestFilter.CLOSED -> interestDao.observeByStatusWithProduct(InterestStatus.CLOSED).collectAsState(initial = emptyList())
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("Reservas / Interesados", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(12.dp))
+
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = filter == InterestFilter.ALL,
+                onClick = { filter = InterestFilter.ALL },
+                shape = SegmentedButtonDefaults.itemShape(0, 4)
+            ) { Text("Todos") }
+
+            SegmentedButton(
+                selected = filter == InterestFilter.PENDING,
+                onClick = { filter = InterestFilter.PENDING },
+                shape = SegmentedButtonDefaults.itemShape(1, 4)
+            ) { Text("Pend.") }
+
+            SegmentedButton(
+                selected = filter == InterestFilter.CONTACTED,
+                onClick = { filter = InterestFilter.CONTACTED },
+                shape = SegmentedButtonDefaults.itemShape(2, 4)
+            ) { Text("Cont.") }
+
+            SegmentedButton(
+                selected = filter == InterestFilter.CLOSED,
+                onClick = { filter = InterestFilter.CLOSED },
+                shape = SegmentedButtonDefaults.itemShape(3, 4)
+            ) { Text("Cerr.") }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (list.isEmpty()) {
+            Text("No hay interesados para este filtro.")
+        } else {
+            LazyColumn {
+                items(list, key = { it.id }) { row ->
+                    ElevatedCard(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(row.buyerName, style = MaterialTheme.typography.titleMedium)
+                            Text("Producto: ${row.productName}")
+                            Text("Tel: ${row.phone}")
+                            if (row.note.isNotBlank()) Text("Nota: ${row.note}")
+
+                            Spacer(Modifier.height(8.dp))
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                AssistChip(
+                                    onClick = {
+                                        val next = when (row.status) {
+                                            InterestStatus.PENDING -> InterestStatus.CONTACTED
+                                            InterestStatus.CONTACTED -> InterestStatus.CLOSED
+                                            InterestStatus.CLOSED -> InterestStatus.PENDING
+                                        }
+                                        scope.launch(Dispatchers.IO) {
+                                            // actualizamos con entidad mínima
+                                            interestDao.update(
+                                                InterestEntity(
+                                                    id = row.id,
+                                                    productId = row.productId,
+                                                    buyerName = row.buyerName,
+                                                    phone = row.phone,
+                                                    note = row.note,
+                                                    status = next,
+                                                    createdAt = row.createdAt
+                                                )
+                                            )
+                                        }
+                                    },
+                                    label = { Text("Estado: ${row.status.name}") }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
     @Composable
     private fun AddBranchDialog(
         initialLatLng: LatLng?,
@@ -535,6 +701,10 @@ private fun EditProductDialog(
     val db = remember { DbProvider.get(context) }
     val photoDao = remember { db.photoDao() }
 
+    val interestDao = remember { db.interestDao() }
+    val interests by interestDao.observeByProduct(product.id).collectAsState(initial = emptyList())
+    var showAddInterest by remember { mutableStateOf(false) }
+
     val photos by photoDao.observeByProduct(product.id).collectAsState(initial = emptyList())
 
     val pickImageLauncher = rememberLauncherForActivityResult(
@@ -593,7 +763,7 @@ private fun EditProductDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     photos.take(3).forEach { ph ->
                         AsyncImage(
-                            model = ph.uri,
+                            model = Uri.parse(ph.uri),
                             contentDescription = null,
                             modifier = Modifier.size(64.dp)
                         )
@@ -611,6 +781,49 @@ private fun EditProductDialog(
                     Spacer(Modifier.width(8.dp))
                     Text(if (available) "Disponible" else "Agotado")
                 }
+
+                HorizontalDivider()
+
+                Text("Interesados: ${interests.size}")
+
+                if (interests.isEmpty()) {
+                    Text("Aún no hay interesados para este producto.")
+                } else {
+                    interests.take(3).forEach { itx ->
+                        ElevatedCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(10.dp)) {
+                                Text(itx.buyerName, style = MaterialTheme.typography.titleSmall)
+                                Text("Tel: ${itx.phone}")
+                                if (itx.note.isNotBlank()) Text("Nota: ${itx.note}")
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    AssistChip(
+                                        onClick = {
+                                            val next = when (itx.status) {
+                                                InterestStatus.PENDING -> InterestStatus.CONTACTED
+                                                InterestStatus.CONTACTED -> InterestStatus.CLOSED
+                                                InterestStatus.CLOSED -> InterestStatus.PENDING
+                                            }
+                                            scope.launch(Dispatchers.IO) {
+                                                interestDao.update(itx.copy(status = next))
+                                            }
+                                        },
+                                        label = { Text("Estado: ${itx.status.name}") }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Text("Mostrando 3 últimos (ver todo en “Reservas”)")
+                }
+
+                OutlinedButton(onClick = { showAddInterest = true }) {
+                    Text("Agregar interesado")
+                }
+
             }
         },
         confirmButton = {
@@ -641,4 +854,55 @@ private fun EditProductDialog(
             }
         }
     )
+    if (showAddInterest) {
+        AddInterestDialog(
+            onDismiss = { showAddInterest = false },
+            onSave = { name, phone, note ->
+                scope.launch(Dispatchers.IO) {
+                    interestDao.insert(
+                        InterestEntity(
+                            productId = product.id,
+                            buyerName = name,
+                            phone = phone,
+                            note = note
+                        )
+                    )
+                }
+                showAddInterest = false
+            }
+        )
+    }
 }
+
+@Composable
+private fun AddInterestDialog(
+    onDismiss: () -> Unit,
+    onSave: (name: String, phone: String, note: String) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nuevo interesado") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Nombre") })
+                OutlinedTextField(phone, { phone = it }, label = { Text("Teléfono") })
+                OutlinedTextField(note, { note = it }, label = { Text("Nota (opcional)") })
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (name.isNotBlank() && phone.isNotBlank()) onSave(name, phone, note)
+                }
+            ) { Text("Guardar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+

@@ -9,19 +9,22 @@ import com.example.jewels.data.local.dao.ProductPhotoDao
 import com.example.jewels.data.local.entity.BranchEntity
 import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductPhotoEntity
+import com.example.jewels.data.local.dao.InterestDao
+import com.example.jewels.data.local.entity.InterestEntity
 
 @Database(
     entities = [
         BranchEntity::class,
         ProductEntity::class,
-        ProductPhotoEntity::class
+        ProductPhotoEntity::class,
+        InterestEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
-@TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun branchDao(): AMBranchDao
     abstract fun productDao(): ProductDao
     abstract fun photoDao(): ProductPhotoDao
+    abstract fun interestDao(): InterestDao
 }

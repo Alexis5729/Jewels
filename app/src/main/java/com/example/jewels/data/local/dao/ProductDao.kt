@@ -4,6 +4,8 @@ import androidx.room.*
 import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductStatus
 import kotlinx.coroutines.flow.Flow
+import androidx.room.Transaction
+import com.example.jewels.data.local.model.ProductWithPhotos
 
 @Dao
 interface ProductDao {
@@ -22,4 +24,13 @@ interface ProductDao {
 
     @Query("SELECT * FROM products WHERE status = :status ORDER BY updatedAt DESC")
     fun observeByStatus(status: ProductStatus): Flow<List<ProductEntity>>
+
+    @Transaction
+    @Query("SELECT * FROM products ORDER BY updatedAt DESC")
+    fun observeAllWithPhotos(): Flow<List<ProductWithPhotos>>
+
+    @Transaction
+    @Query("SELECT * FROM products WHERE status = :status ORDER BY updatedAt DESC")
+    fun observeByStatusWithPhotos(status: com.example.jewels.data.local.entity.ProductStatus): Flow<List<ProductWithPhotos>>
+
 }
