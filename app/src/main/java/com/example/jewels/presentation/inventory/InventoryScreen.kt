@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,7 +25,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ElevatedCard
@@ -51,12 +51,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.jewels.data.local.db.DbProvider
-import com.example.jewels.data.local.entity.InterestEntity
-import com.example.jewels.data.local.entity.InterestStatus
 import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductPhotoEntity
 import com.example.jewels.data.local.entity.ProductStatus
-import com.example.jewels.presentation.reservations.AddInterestDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -153,10 +150,10 @@ fun InventoryScreen() {
                 product = selected,
                 onDismiss = { selectedProduct = null },
                 onSave = { updated ->
+                    selectedProduct = null
                     scope.launch(Dispatchers.IO) {
                         dao.update(updated.copy(updatedAt = System.currentTimeMillis()))
                     }
-                    selectedProduct = null
                 },
                 onDelete = { prod ->
                     scope.launch(Dispatchers.IO) { dao.delete(prod) }
@@ -264,11 +261,6 @@ private fun EditProductDialog(
 
     val db = remember { DbProvider.get(context) }
     val photoDao = remember { db.photoDao() }
-
-    val interestDao = remember { db.interestDao() }
-    val interests by interestDao.observeByProduct(product.id).collectAsState(initial = emptyList())
-    var showAddInterest by remember { mutableStateOf(false) }
-
     val photos by photoDao.observeByProduct(product.id).collectAsState(initial = emptyList())
 
     val pickImageLauncher = rememberLauncherForActivityResult(
@@ -279,7 +271,6 @@ private fun EditProductDialog(
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
-
             scope.launch(Dispatchers.IO) {
                 photoDao.insert(
                     ProductPhotoEntity(
@@ -291,15 +282,16 @@ private fun EditProductDialog(
         }
     }
 
+    var showInvalidMsg by remember { mutableStateOf(false) }
+
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             shape = MaterialTheme.shapes.extraLarge
         ) {
-
-            // 1) Header fijo
+            // HEADER
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -310,12 +302,12 @@ private fun EditProductDialog(
 
             HorizontalDivider()
 
-            // 2) Body con scroll
+            // BODY (SCROLL)
             val scrollState = rememberScrollState()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 520.dp)   // ajusta si quieres
+                    .heightIn(max = 520.dp)
                     .verticalScroll(scrollState)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -323,7 +315,7 @@ private fun EditProductDialog(
 
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it },
+                    onValueChange = { name = it; showInvalidMsg = false },
                     label = { Text("Nombre") }
                 )
 
@@ -335,13 +327,13 @@ private fun EditProductDialog(
 
                 OutlinedTextField(
                     value = price,
-                    onValueChange = { price = it.filter { c -> c.isDigit() } },
+                    onValueChange = { price = it.filter { c -> c.isDigit() }; showInvalidMsg = false },
                     label = { Text("Precio (CLP)") }
                 )
 
                 OutlinedTextField(
                     value = stock,
-                    onValueChange = { stock = it.filter { c -> c.isDigit() } },
+                    onValueChange = { stock = it.filter { c -> c.isDigit() }; showInvalidMsg = false },
                     label = { Text("Stock") }
                 )
 
@@ -367,101 +359,59 @@ private fun EditProductDialog(
                     Text(if (available) "Disponible" else "Agotado")
                 }
 
-                HorizontalDivider()
-
-                Text("Interesados: ${interests.size}")
-
-                if (interests.isEmpty()) {
-                    Text("Aún no hay interesados para este producto.")
-                } else {
-                    interests.take(3).forEach { itx ->
-                        ElevatedCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(10.dp)) {
-                                Text(itx.buyerName, style = MaterialTheme.typography.titleSmall)
-                                Text("Tel: ${itx.phone}")
-                                if (itx.note.isNotBlank()) Text("Nota: ${itx.note}")
-
-                                Spacer(Modifier.height(6.dp))
-
-                                AssistChip(
-                                    onClick = {
-                                        val next = when (itx.status) {
-                                            InterestStatus.PENDING -> InterestStatus.CONTACTED
-                                            InterestStatus.CONTACTED -> InterestStatus.CLOSED
-                                            InterestStatus.CLOSED -> InterestStatus.PENDING
-                                        }
-                                        scope.launch(Dispatchers.IO) {
-                                            interestDao.update(itx.copy(status = next))
-                                        }
-                                    },
-                                    label = { Text("Estado: ${itx.status.name}") }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                    }
-                    Text("Mostrando 3 últimos (ver todo en “Reservas”)")
-                }
-
-                OutlinedButton(onClick = { showAddInterest = true }) {
-                    Text("Agregar interesado")
+                if (showInvalidMsg) {
+                    Text(
+                        "Revisa: nombre, precio y stock deben ser válidos.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
 
             HorizontalDivider()
 
-            // 3) Footer fijo (botones SIEMPRE visibles)
+            // FOOTER (FIJO)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { onDelete(product) }) { Text("Eliminar") }
+                TextButton(onClick = { onDelete(product) }) { Text("Eliminar", maxLines = 1) }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onDismiss) { Text("Cancelar") }
+                Spacer(Modifier.weight(1f))
 
-                    Button(
-                        onClick = {
-                            val p = price.toIntOrNull()
-                            val s = stock.toIntOrNull()
-                            if (p != null && s != null && name.isNotBlank()) {
-                                onSave(
-                                    product.copy(
-                                        name = name,
-                                        description = desc,
-                                        priceClp = p,
-                                        stock = s,
-                                        status = if (available) ProductStatus.AVAILABLE else ProductStatus.SOLD_OUT,
-                                        updatedAt = System.currentTimeMillis()
-                                    )
-                                )
-                            }
+                TextButton(onClick = onDismiss) { Text("Cancelar", maxLines = 1) }
+
+                Spacer(Modifier.width(8.dp))
+
+                Button(
+                    onClick = {
+                        val p = price.toIntOrNull()
+                        val s = stock.toIntOrNull()
+
+                        val ok = name.isNotBlank() && p != null && s != null
+                        if (!ok) {
+                            showInvalidMsg = true
+                            return@Button
                         }
-                    ) { Text("Guardar") }
+
+                        onSave(
+                            product.copy(
+                                name = name.trim(),
+                                description = desc.trim(),
+                                priceClp = p!!,
+                                stock = s!!,
+                                status = if (available) ProductStatus.AVAILABLE else ProductStatus.SOLD_OUT,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                        )
+                        onDismiss()
+                    },
+                    modifier = Modifier.widthIn(min = 120.dp)
+                ) {
+                    Text("Guardar", maxLines = 1)
                 }
             }
         }
-    }
-
-    if (showAddInterest) {
-        AddInterestDialog(
-            onDismiss = { showAddInterest = false },
-            onSave = { name, phone, note ->
-                scope.launch(Dispatchers.IO) {
-                    interestDao.insert(
-                        InterestEntity(
-                            productId = product.id,
-                            buyerName = name,
-                            phone = phone,
-                            note = note
-                        )
-                    )
-                }
-                showAddInterest = false
-            }
-        )
     }
 }

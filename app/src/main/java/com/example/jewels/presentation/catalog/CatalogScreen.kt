@@ -18,6 +18,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -26,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.room.withTransaction
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +40,7 @@ import com.example.jewels.data.local.entity.ProductStatus
 import com.example.jewels.presentation.reservations.AddInterestDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import android.widget.Toast
 
 private enum class CatalogFilter { ALL, AVAILABLE, SOLD_OUT }
 
@@ -53,6 +56,7 @@ fun CatalogScreen() {
     var showInterestDialog by remember { mutableStateOf(false) }
     var selectedProductId by remember { mutableStateOf<Long?>(null) }
     var selectedProductName by remember { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var filter by remember { mutableStateOf(CatalogFilter.ALL) }
 
@@ -152,9 +156,9 @@ fun CatalogScreen() {
                         selectedProductName = p.name
                         showInterestDialog = true
                     },
-                    enabled = (p.status == ProductStatus.AVAILABLE)
+                    enabled = (p.status == ProductStatus.AVAILABLE && p.stock > 0)
                 ) {
-                    Text(if (p.status == ProductStatus.AVAILABLE) "Reservar" else "No disponible")
+                    Text(if (p.stock > 0 && p.status == ProductStatus.AVAILABLE) "Reservar" else "No disponible")
                 }
 
             }
@@ -165,19 +169,35 @@ fun CatalogScreen() {
             onDismiss = { showInterestDialog = false },
             onSave = { name, phone, note ->
                 scope.launch(Dispatchers.IO) {
-                    interestDao.insert(
-                        InterestEntity(
-                            productId = selectedProductId!!,
-                            buyerName = name,
-                            phone = phone,
-                            note = note,
-                            status = InterestStatus.PENDING
-                        )
-                    )
+                    db.withTransaction {
+
+                        // 1) intentar descontar stock
+                        val updatedRows = dao.decrementStockIfAvailable(selectedProductId!!)
+
+                        if (updatedRows == 1) {
+                            // 2) crear reserva SOLO si había stock
+                            interestDao.insert(
+                                InterestEntity(
+                                    productId = selectedProductId!!,
+                                    buyerName = name,
+                                    phone = phone,
+                                    note = note,
+                                    status = InterestStatus.PENDING
+                                )
+                            )
+
+                            // 3) si llegó a 0, marcar SOLD_OUT
+                            dao.markSoldOutIfNoStock(selectedProductId!!)
+                        } else {
+                            scope.launch(Dispatchers.Main) {
+                                Toast.makeText(context, "Sin stock disponible", Toast.LENGTH_SHORT).show()
+                            }
+                            // no había stock → no crear reserva
+                            // (si quieres, aquí mostramos mensaje después)
+                        }
+                    }
                 }
                 showInterestDialog = false
             }
         )
-    }
-
-}
+    }}

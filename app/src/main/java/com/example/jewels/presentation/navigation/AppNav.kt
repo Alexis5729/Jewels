@@ -15,6 +15,7 @@ import com.example.jewels.presentation.catalog.CatalogScreen
 import com.example.jewels.presentation.map.MapScreen
 import com.example.jewels.presentation.reservations.ReservationsScreen
 import androidx.navigation.compose.*
+import com.example.jewels.presentation.sales.SalesScreen
 
 private data class BottomItem(
     val route: Route,
@@ -33,6 +34,7 @@ fun AppScaffold() {
         BottomItem(Route.Catalog, "Catálogo", { Icon(Icons.Filled.ShoppingBag, contentDescription = null) }),
         BottomItem(Route.Map, "Mapa", { Icon(Icons.Filled.Map, contentDescription = null) }),
         BottomItem(Route.Reservations, "Reservas", { Icon(Icons.Filled.Bookmark, contentDescription = null) }),
+        BottomItem(Route.Sales, "Ventas", { Icon(Icons.Filled.ShoppingBag, null) }),
     )
 
     Scaffold(
@@ -65,6 +67,7 @@ fun AppScaffold() {
             composable(Route.Catalog.path) { CatalogScreen() }
             composable(Route.Map.path) { MapScreen() }
             composable(Route.Reservations.path) { ReservationsScreen() }
+            composable(Route.Sales.path) { SalesScreen() }
         }
     }
 }

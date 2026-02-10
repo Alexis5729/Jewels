@@ -1,6 +1,7 @@
 package com.example.jewels.data.local.dao
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
@@ -27,6 +28,11 @@ interface InterestDao {
     @Query("SELECT * FROM interests WHERE productId = :productId ORDER BY createdAt DESC")
     fun observeByProduct(productId: Long): Flow<List<InterestEntity>>
 
+    @Delete
+    suspend fun delete(interests: InterestEntity)
+
+    @Query("DELETE FROM interests WHERE id = :id")
+    suspend fun deleteById(id: Long)
 
     @Query("""
     SELECT i.id, i.productId, p.name as productName, i.buyerName, i.phone, i.note, i.status, i.createdAt

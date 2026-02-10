@@ -5,4 +5,7 @@ sealed class Route(val path: String) {
     data object Catalog : Route("catalog")
     data object Map : Route("map")
     data object Reservations : Route("reservations")
+
+    object Sales : Route("sales")
+
 }
