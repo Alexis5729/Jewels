@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,16 +22,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,7 +48,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
@@ -57,6 +59,10 @@ import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductPhotoEntity
 import com.example.jewels.data.local.entity.ProductStatus
 import com.example.jewels.presentation.components.NaoluxHeader
+import com.example.jewels.presentation.components.premium.GoldButton
+import com.example.jewels.presentation.components.premium.GoldOutlineButton
+import com.example.jewels.presentation.components.premium.PremiumCard
+import com.example.jewels.presentation.components.premium.PremiumStatusChip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -74,7 +80,6 @@ fun InventoryScreen() {
     Box(
         Modifier
             .fillMaxSize()
-            // ✅ aseguras fondo premium (aunque alguien olvide poner background en un screen)
             .background(MaterialTheme.colorScheme.background)
     ) {
         Column(
@@ -83,69 +88,73 @@ fun InventoryScreen() {
                 .padding(16.dp)
         ) {
             NaoluxHeader("Inventario")
-            Spacer(Modifier.heightIn(min = 12.dp))
+            Spacer(Modifier.height(12.dp))
 
             if (products.isEmpty()) {
-                Text(
-                    "Aún no hay productos. Toca + para agregar.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                PremiumCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Aún no hay productos.",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Toca + para agregar tu primer producto.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             } else {
-                LazyColumn {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(products, key = { it.product.id }) { item ->
                         val p = item.product
                         val photos = item.photos
+                        val thumb = photos.firstOrNull()?.uri
 
-                        // ✅ Card premium: contraste + elevación suave
-                        Card(
+                        PremiumCard(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                                .clickable { selectedProduct = p },
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                            shape = MaterialTheme.shapes.extraLarge
+                                .clickable { selectedProduct = p }
                         ) {
                             Row(
-                                modifier = Modifier.padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                val thumb = photos.firstOrNull()?.uri
                                 if (thumb != null) {
                                     AsyncImage(
                                         model = Uri.parse(thumb),
                                         contentDescription = null,
-                                        modifier = Modifier.size(56.dp)
+                                        modifier = Modifier
+                                            .size(58.dp)
+                                            .clip(RoundedCornerShape(14.dp))
                                     )
                                     Spacer(Modifier.width(12.dp))
                                 }
 
                                 Column(Modifier.weight(1f)) {
-                                    Text(
-                                        p.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                                    Row(
+                                        Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            p.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        PremiumStatusChip(
+                                            if (p.status == ProductStatus.AVAILABLE) "Disponible" else "Agotado"
+                                        )
+                                    }
 
-                                    Spacer(Modifier.heightIn(min = 6.dp))
+                                    Spacer(Modifier.height(6.dp))
 
-                                    // ✅ jerarquía visual: labels en onSurfaceVariant
                                     Text(
                                         "Precio: $${p.priceClp} CLP",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(
-                                        "Stock: ${p.stock}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        "Estado: ${if (p.status == ProductStatus.AVAILABLE) "Disponible" else "Agotado"}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        "Fotos: ${photos.size}",
+                                        "Stock: ${p.stock} • Fotos: ${photos.size}",
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -156,20 +165,13 @@ fun InventoryScreen() {
             }
         }
 
-        // ✅ FAB premium: sombra y dorado
         FloatingActionButton(
             onClick = { showAdd = true },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp),
-            elevation = FloatingActionButtonDefaults.elevation(
-                defaultElevation = 8.dp,
-                pressedElevation = 10.dp,
-                hoveredElevation = 9.dp,
-                focusedElevation = 9.dp
-            )
+                .padding(16.dp)
         ) {
             Icon(Icons.Filled.Add, contentDescription = "Agregar producto")
         }
@@ -216,14 +218,14 @@ private fun AddProductDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("Nuevo producto") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nombre") }
+                    label = { Text("Nombre") },
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = desc,
@@ -233,51 +235,44 @@ private fun AddProductDialog(
                 OutlinedTextField(
                     value = price,
                     onValueChange = { price = it.filter { c -> c.isDigit() } },
-                    label = { Text("Precio (CLP)") }
+                    label = { Text("Precio (CLP)") },
+                    singleLine = true
                 )
                 OutlinedTextField(
                     value = stock,
                     onValueChange = { stock = it.filter { c -> c.isDigit() } },
-                    label = { Text("Stock") }
+                    label = { Text("Stock") },
+                    singleLine = true
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(
-                        checked = available,
-                        onCheckedChange = { available = it }
-                    )
+                    Switch(checked = available, onCheckedChange = { available = it })
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (available) "Disponible" else "Agotado",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(if (available) "Disponible" else "Agotado")
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
-                    val priceInt = price.toIntOrNull()
-                    val stockInt = stock.toIntOrNull()
-
-                    if (name.isNotBlank() && priceInt != null && stockInt != null) {
+                    val p = price.toIntOrNull()
+                    val s = stock.toIntOrNull()
+                    if (name.isNotBlank() && p != null && s != null) {
                         onSave(
                             ProductEntity(
                                 name = name.trim(),
                                 description = desc.trim(),
-                                priceClp = priceInt,
-                                stock = stockInt,
+                                priceClp = p,
+                                stock = s,
                                 status = if (available) ProductStatus.AVAILABLE else ProductStatus.SOLD_OUT
                             )
                         )
                     }
                 }
-            ) { Text("Guardar", color = MaterialTheme.colorScheme.primary) }
+            ) { Text("Guardar") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }
@@ -328,28 +323,27 @@ private fun EditProductDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             shape = MaterialTheme.shapes.extraLarge
         ) {
-            // HEADER
+
+            // HEADER (fijo)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
+                Text("Editar producto", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(4.dp))
                 Text(
-                    "Editar producto",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    "Actualiza datos y fotos.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            HorizontalDivider()
 
-            // BODY (SCROLL)
+            // BODY (scroll)
             val scrollState = rememberScrollState()
             Column(
                 modifier = Modifier
@@ -362,7 +356,8 @@ private fun EditProductDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it; showInvalidMsg = false },
-                    label = { Text("Nombre") }
+                    label = { Text("Nombre") },
+                    singleLine = true
                 )
 
                 OutlinedTextField(
@@ -374,44 +369,44 @@ private fun EditProductDialog(
                 OutlinedTextField(
                     value = price,
                     onValueChange = { price = it.filter { c -> c.isDigit() }; showInvalidMsg = false },
-                    label = { Text("Precio (CLP)") }
+                    label = { Text("Precio (CLP)") },
+                    singleLine = true
                 )
 
                 OutlinedTextField(
                     value = stock,
                     onValueChange = { stock = it.filter { c -> c.isDigit() }; showInvalidMsg = false },
-                    label = { Text("Stock") }
+                    label = { Text("Stock") },
+                    singleLine = true
                 )
 
-                Text(
-                    "Fotos: ${photos.size}",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                PremiumCard(modifier = Modifier.fillMaxWidth()) {
+                    Text("Fotos (${photos.size})", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(10.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    photos.take(3).forEach { ph ->
-                        AsyncImage(
-                            model = Uri.parse(ph.uri),
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp)
-                        )
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        photos.take(3).forEach { ph ->
+                            AsyncImage(
+                                model = Uri.parse(ph.uri),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(68.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                            )
+                        }
                     }
-                }
 
-                OutlinedButton(
-                    onClick = { pickImageLauncher.launch(arrayOf("image/*")) },
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
+                    Spacer(Modifier.height(10.dp))
+                    GoldOutlineButton(
+                        text = "Agregar foto desde galería",
+                        onClick = { pickImageLauncher.launch(arrayOf("image/*")) }
                     )
-                ) { Text("Agregar foto desde galería") }
+                }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = available, onCheckedChange = { available = it })
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (available) "Disponible" else "Agotado",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(if (available) "Disponible" else "Agotado")
                 }
 
                 if (showInvalidMsg) {
@@ -423,26 +418,20 @@ private fun EditProductDialog(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            HorizontalDivider()
 
-            // FOOTER (FIJO)
+            // FOOTER (fijo, siempre visible)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(
-                    onClick = { onDelete(product) }
-                ) {
-                    Text("Eliminar", maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                TextButton(onClick = { onDelete(product) }) { Text("Eliminar", maxLines = 1) }
 
                 Spacer(Modifier.weight(1f))
 
-                TextButton(onClick = onDismiss) {
-                    Text("Cancelar", maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                TextButton(onClick = onDismiss) { Text("Cancelar", maxLines = 1) }
 
                 Spacer(Modifier.width(8.dp))
 
@@ -450,7 +439,6 @@ private fun EditProductDialog(
                     onClick = {
                         val p = price.toIntOrNull()
                         val s = stock.toIntOrNull()
-
                         val ok = name.isNotBlank() && p != null && s != null
                         if (!ok) {
                             showInvalidMsg = true
@@ -467,16 +455,9 @@ private fun EditProductDialog(
                                 updatedAt = System.currentTimeMillis()
                             )
                         )
-                        onDismiss()
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    modifier = Modifier.widthIn(min = 120.dp)
-                ) {
-                    Text("Guardar", maxLines = 1)
-                }
+                    modifier = Modifier.widthIn(min = 120.dp),
+                ) { Text("Guardar", maxLines = 1) }
             }
         }
     }
