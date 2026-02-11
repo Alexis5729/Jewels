@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,7 +39,6 @@ import kotlinx.coroutines.launch
 fun MapScreen() {
 
     val context = LocalContext.current
-
     val db = remember { DbProvider.get(context) }
 
     val viewModel = remember {
@@ -46,13 +46,9 @@ fun MapScreen() {
     }
 
     val branches by viewModel.branches.collectAsState()
-
     var showForm by remember { mutableStateOf(false) }
-
     val scope = rememberCoroutineScope()
-
     var pickedLatLng by remember { mutableStateOf<LatLng?>(null) }
-
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(
@@ -87,11 +83,13 @@ fun MapScreen() {
         // BOTÓN +
         FloatingActionButton(
             onClick = { showForm = true },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(16.dp)
         ) {
-            Icon(Icons.Default.Add, contentDescription = "Agregar sucursal")
+            Icon(Icons.Filled.Add, contentDescription = "Agregar producto")
         }
 
         // FORMULARIO

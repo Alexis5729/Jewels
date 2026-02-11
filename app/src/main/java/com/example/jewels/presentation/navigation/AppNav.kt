@@ -39,7 +39,9 @@ fun AppScaffold() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface
+            ) {
                 items.forEach { item ->
                     val selected = currentRoute == item.route.path
                     NavigationBarItem(
@@ -52,7 +54,12 @@ fun AppScaffold() {
                             }
                         },
                         icon = item.icon,
-                        label = { Text(item.label) }
+                        label = { Text(item.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        )
                     )
                 }
             }

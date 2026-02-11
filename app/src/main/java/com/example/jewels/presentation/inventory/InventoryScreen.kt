@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,9 +26,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -54,14 +56,14 @@ import com.example.jewels.data.local.db.DbProvider
 import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductPhotoEntity
 import com.example.jewels.data.local.entity.ProductStatus
+import com.example.jewels.presentation.components.NaoluxHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-
 
 @Composable
 fun InventoryScreen() {
     val context = LocalContext.current
-    val db = remember { DbProvider.get(context) }   // ✅ misma instancia en toda la app
+    val db = remember { DbProvider.get(context) }
     val dao = remember { db.productDao() }
     val scope = rememberCoroutineScope()
 
@@ -69,38 +71,51 @@ fun InventoryScreen() {
     var selectedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var showAdd by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize()) {
-
+    Box(
+        Modifier
+            .fillMaxSize()
+            // ✅ aseguras fondo premium (aunque alguien olvide poner background en un screen)
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Column(
-            modifier = Modifier
+            Modifier
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Text("Inventario", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
+            NaoluxHeader("Inventario")
+            Spacer(Modifier.heightIn(min = 12.dp))
 
             if (products.isEmpty()) {
-                Text("Aún no hay productos. Toca + para agregar.")
+                Text(
+                    "Aún no hay productos. Toca + para agregar.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             } else {
                 LazyColumn {
                     items(products, key = { it.product.id }) { item ->
                         val p = item.product
                         val photos = item.photos
 
-                        ElevatedCard(
+                        // ✅ Card premium: contraste + elevación suave
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 8.dp)
-                                .clickable { selectedProduct = p }
+                                .padding(bottom = 12.dp)
+                                .clickable { selectedProduct = p },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                            shape = MaterialTheme.shapes.extraLarge
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp), // ✅ padding interno
+                                modifier = Modifier.padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 val thumb = photos.firstOrNull()?.uri
                                 if (thumb != null) {
                                     AsyncImage(
-                                        model = android.net.Uri.parse(thumb),
+                                        model = Uri.parse(thumb),
                                         contentDescription = null,
                                         modifier = Modifier.size(56.dp)
                                     )
@@ -108,16 +123,31 @@ fun InventoryScreen() {
                                 }
 
                                 Column(Modifier.weight(1f)) {
-                                    Text(p.name, style = MaterialTheme.typography.titleMedium)
-                                    Text("Precio: $${p.priceClp} CLP")
-                                    Text("Stock: ${p.stock}")
                                     Text(
-                                        if (p.status == ProductStatus.AVAILABLE)
-                                            "Estado: Disponible"
-                                        else
-                                            "Estado: Agotado"
+                                        p.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
-                                    Text("Fotos: ${photos.size}")
+
+                                    Spacer(Modifier.heightIn(min = 6.dp))
+
+                                    // ✅ jerarquía visual: labels en onSurfaceVariant
+                                    Text(
+                                        "Precio: $${p.priceClp} CLP",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Stock: ${p.stock}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Estado: ${if (p.status == ProductStatus.AVAILABLE) "Disponible" else "Agotado"}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Fotos: ${photos.size}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
@@ -126,11 +156,20 @@ fun InventoryScreen() {
             }
         }
 
+        // ✅ FAB premium: sombra y dorado
         FloatingActionButton(
             onClick = { showAdd = true },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp)
+                .padding(16.dp),
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 8.dp,
+                pressedElevation = 10.dp,
+                hoveredElevation = 9.dp,
+                focusedElevation = 9.dp
+            )
         ) {
             Icon(Icons.Filled.Add, contentDescription = "Agregar producto")
         }
@@ -164,8 +203,6 @@ fun InventoryScreen() {
     }
 }
 
-
-
 @Composable
 private fun AddProductDialog(
     onDismiss: () -> Unit,
@@ -179,28 +216,25 @@ private fun AddProductDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("Nuevo producto") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Nombre") }
                 )
-
                 OutlinedTextField(
                     value = desc,
                     onValueChange = { desc = it },
                     label = { Text("Descripción") }
                 )
-
                 OutlinedTextField(
                     value = price,
                     onValueChange = { price = it.filter { c -> c.isDigit() } },
                     label = { Text("Precio (CLP)") }
                 )
-
                 OutlinedTextField(
                     value = stock,
                     onValueChange = { stock = it.filter { c -> c.isDigit() } },
@@ -213,7 +247,10 @@ private fun AddProductDialog(
                         onCheckedChange = { available = it }
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text(if (available) "Disponible" else "Agotado")
+                    Text(
+                        if (available) "Disponible" else "Agotado",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },
@@ -226,8 +263,8 @@ private fun AddProductDialog(
                     if (name.isNotBlank() && priceInt != null && stockInt != null) {
                         onSave(
                             ProductEntity(
-                                name = name,
-                                description = desc,
+                                name = name.trim(),
+                                description = desc.trim(),
                                 priceClp = priceInt,
                                 stock = stockInt,
                                 status = if (available) ProductStatus.AVAILABLE else ProductStatus.SOLD_OUT
@@ -235,10 +272,12 @@ private fun AddProductDialog(
                         )
                     }
                 }
-            ) { Text("Guardar") }
+            ) { Text("Guardar", color = MaterialTheme.colorScheme.primary) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     )
 }
@@ -289,6 +328,10 @@ private fun EditProductDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
             shape = MaterialTheme.shapes.extraLarge
         ) {
             // HEADER
@@ -297,10 +340,14 @@ private fun EditProductDialog(
                     .fillMaxWidth()
                     .padding(16.dp)
             ) {
-                Text("Editar producto", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Editar producto",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
 
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
 
             // BODY (SCROLL)
             val scrollState = rememberScrollState()
@@ -312,7 +359,6 @@ private fun EditProductDialog(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it; showInvalidMsg = false },
@@ -337,7 +383,10 @@ private fun EditProductDialog(
                     label = { Text("Stock") }
                 )
 
-                Text("Fotos: ${photos.size}")
+                Text(
+                    "Fotos: ${photos.size}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     photos.take(3).forEach { ph ->
@@ -350,24 +399,31 @@ private fun EditProductDialog(
                 }
 
                 OutlinedButton(
-                    onClick = { pickImageLauncher.launch(arrayOf("image/*")) }
+                    onClick = { pickImageLauncher.launch(arrayOf("image/*")) },
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
                 ) { Text("Agregar foto desde galería") }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = available, onCheckedChange = { available = it })
                     Spacer(Modifier.width(8.dp))
-                    Text(if (available) "Disponible" else "Agotado")
+                    Text(
+                        if (available) "Disponible" else "Agotado",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 if (showInvalidMsg) {
                     Text(
                         "Revisa: nombre, precio y stock deben ser válidos.",
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
 
             // FOOTER (FIJO)
             Row(
@@ -376,11 +432,17 @@ private fun EditProductDialog(
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { onDelete(product) }) { Text("Eliminar", maxLines = 1) }
+                TextButton(
+                    onClick = { onDelete(product) }
+                ) {
+                    Text("Eliminar", maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
 
                 Spacer(Modifier.weight(1f))
 
-                TextButton(onClick = onDismiss) { Text("Cancelar", maxLines = 1) }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancelar", maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
 
                 Spacer(Modifier.width(8.dp))
 
@@ -407,6 +469,10 @@ private fun EditProductDialog(
                         )
                         onDismiss()
                     },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
                     modifier = Modifier.widthIn(min = 120.dp)
                 ) {
                     Text("Guardar", maxLines = 1)

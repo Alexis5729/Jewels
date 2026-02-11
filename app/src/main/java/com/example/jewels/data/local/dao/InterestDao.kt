@@ -34,6 +34,9 @@ interface InterestDao {
     @Query("DELETE FROM interests WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("UPDATE interests SET status = :status WHERE id = :id")
+    suspend fun updateStatus(id: Long, status: InterestStatus)
+
     @Query("""
     SELECT i.id, i.productId, p.name as productName, i.buyerName, i.phone, i.note, i.status, i.createdAt
     FROM interests i

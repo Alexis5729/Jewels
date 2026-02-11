@@ -12,5 +12,6 @@ data class SaleEntity(
     val phone: String,
     val note: String = "",
     val priceClp: Int,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val qty: Int
 )

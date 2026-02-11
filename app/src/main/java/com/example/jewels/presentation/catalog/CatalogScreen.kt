@@ -41,6 +41,8 @@ import com.example.jewels.presentation.reservations.AddInterestDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import android.widget.Toast
+import androidx.compose.foundation.background
+import com.example.jewels.presentation.components.NaoluxHeader
 
 private enum class CatalogFilter { ALL, AVAILABLE, SOLD_OUT }
 
@@ -71,8 +73,13 @@ fun CatalogScreen() {
             dao.observeByStatusWithPhotos(ProductStatus.SOLD_OUT).collectAsState(initial = emptyList())
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Catálogo", style = MaterialTheme.typography.titleLarge)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+    ) {
+        NaoluxHeader("Catálogo")
         Spacer(Modifier.height(12.dp))
 
         SingleChoiceSegmentedButtonRow {

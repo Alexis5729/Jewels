@@ -14,9 +14,6 @@ import androidx.room.Room
 import com.example.jewels.data.local.db.AppDatabase
 import com.example.jewels.presentation.navigation.AppScaffold
 import com.example.jewels.ui.theme.JewelsTheme
-import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.launch
-import com.example.jewels.data.local.entity.BranchEntity
 
 class MainActivity : ComponentActivity() {
 
@@ -37,13 +34,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            JewelsTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-
-                    // Por ahora solo pantalla base
-                    AppRoot(modifier = Modifier.padding(innerPadding))
-
-                }
+            JewelsTheme(darkTheme = true) {
+                AppScaffold()
             }
         }
     }

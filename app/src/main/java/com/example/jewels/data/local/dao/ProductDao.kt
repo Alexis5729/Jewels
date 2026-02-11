@@ -63,4 +63,7 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): com.example.jewels.data.local.entity.ProductEntity?
 
+    @Query("UPDATE products SET stock = stock + :qty WHERE id = :productId")
+    suspend fun incrementStockBy(productId: Long, qty: Int)
+
 }

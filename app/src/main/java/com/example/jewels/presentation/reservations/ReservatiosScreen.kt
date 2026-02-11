@@ -1,5 +1,6 @@
 package com.example.jewels.presentation.reservations
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +37,7 @@ import com.example.jewels.data.local.db.DbProvider
 import com.example.jewels.data.local.entity.InterestEntity
 import com.example.jewels.data.local.entity.InterestStatus
 import com.example.jewels.data.local.model.InterestWithProduct
+import com.example.jewels.presentation.components.NaoluxHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -68,8 +70,13 @@ fun ReservationsScreen() {
         InterestFilter.CLOSED -> interestDao.observeByStatusWithProduct(InterestStatus.CLOSED).collectAsState(initial = emptyList())
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("Reservas / Interesados", style = MaterialTheme.typography.titleLarge)
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp)
+    ) {
+        NaoluxHeader("Reservas")
         Spacer(Modifier.height(12.dp))
 
         SingleChoiceSegmentedButtonRow {
@@ -255,7 +262,8 @@ fun ReservationsScreen() {
                                         buyerName = row.buyerName,
                                         phone = row.phone,
                                         priceClp = priceInt,
-                                        note = note
+                                        note = note,
+                                        qty = 1
                                     )
                                 )
 
