@@ -26,11 +26,7 @@ fun NaoluxHeader(title: String) {
             modifier = Modifier
                 .size(56.dp)
                 .clip(CircleShape)
-                .border(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary,
-                    shape = CircleShape
-                )
+
         )
         Spacer(Modifier.width(10.dp))
         Column {

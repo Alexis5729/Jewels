@@ -4,7 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,22 +22,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,8 +53,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.jewels.data.local.db.DbProvider
@@ -59,10 +64,8 @@ import com.example.jewels.data.local.entity.ProductEntity
 import com.example.jewels.data.local.entity.ProductPhotoEntity
 import com.example.jewels.data.local.entity.ProductStatus
 import com.example.jewels.presentation.components.NaoluxHeader
-import com.example.jewels.presentation.components.premium.GoldButton
 import com.example.jewels.presentation.components.premium.GoldOutlineButton
 import com.example.jewels.presentation.components.premium.PremiumCard
-import com.example.jewels.presentation.components.premium.PremiumStatusChip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -104,62 +107,23 @@ fun InventoryScreen() {
                     )
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     items(products, key = { it.product.id }) { item ->
                         val p = item.product
                         val photos = item.photos
                         val thumb = photos.firstOrNull()?.uri
 
-                        PremiumCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectedProduct = p }
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (thumb != null) {
-                                    AsyncImage(
-                                        model = Uri.parse(thumb),
-                                        contentDescription = null,
-                                        modifier = Modifier
-                                            .size(58.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                }
-
-                                Column(Modifier.weight(1f)) {
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            p.name,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        PremiumStatusChip(
-                                            if (p.status == ProductStatus.AVAILABLE) "Disponible" else "Agotado"
-                                        )
-                                    }
-
-                                    Spacer(Modifier.height(6.dp))
-
-                                    Text(
-                                        "Precio: $${p.priceClp} CLP",
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    Text(
-                                        "Stock: ${p.stock} • Fotos: ${photos.size}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
+                        NaoluxInventoryCard(
+                            name = p.name,
+                            priceClp = p.priceClp,
+                            stock = p.stock,
+                            photosCount = photos.size,
+                            status = p.status,
+                            thumbUri = thumb,
+                            onClick = { selectedProduct = p }
+                        )
                     }
                 }
             }
@@ -325,8 +289,6 @@ private fun EditProductDialog(
                 .padding(12.dp),
             shape = MaterialTheme.shapes.extraLarge
         ) {
-
-            // HEADER (fijo)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -343,7 +305,6 @@ private fun EditProductDialog(
 
             HorizontalDivider()
 
-            // BODY (scroll)
             val scrollState = rememberScrollState()
             Column(
                 modifier = Modifier
@@ -420,7 +381,6 @@ private fun EditProductDialog(
 
             HorizontalDivider()
 
-            // FOOTER (fijo, siempre visible)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -456,9 +416,134 @@ private fun EditProductDialog(
                             )
                         )
                     },
-                    modifier = Modifier.widthIn(min = 120.dp),
+                    modifier = Modifier.widthIn(min = 120.dp)
                 ) { Text("Guardar", maxLines = 1) }
             }
         }
+    }
+}
+
+@Composable
+private fun NaoluxInventoryCard(
+    name: String,
+    priceClp: Int,
+    stock: Int,
+    photosCount: Int,
+    status: ProductStatus,
+    thumbUri: String?,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+    val safeThumb = thumbUri?.takeIf { it.isNotBlank() }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(14.dp))
+            ) {
+                if (safeThumb != null) {
+                    AsyncImage(
+                        model = Uri.parse(safeThumb),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                    )
+                }
+            }
+
+
+            Spacer(Modifier.width(14.dp))
+
+            Column(Modifier.weight(1f)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    NaoluxStatusPill(
+                        text = if (status == ProductStatus.AVAILABLE) "Disponible" else "Agotado",
+                        emphasized = status == ProductStatus.AVAILABLE
+                    )
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    text = "$${priceClp} CLP",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp
+                    )
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = "Stock: $stock • Fotos: $photosCount",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NaoluxStatusPill(
+    text: String,
+    emphasized: Boolean
+) {
+    val bg = if (emphasized)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+    else
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
+
+    val border = if (emphasized)
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+    else
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+
+    Surface(
+        color = bg,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, border)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium)
+        )
     }
 }

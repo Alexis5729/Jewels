@@ -16,6 +16,7 @@ import com.example.jewels.presentation.map.MapScreen
 import com.example.jewels.presentation.reservations.ReservationsScreen
 import androidx.navigation.compose.*
 import com.example.jewels.presentation.sales.SalesScreen
+import com.example.jewels.presentation.splash.SplashScreen
 
 private data class BottomItem(
     val route: Route,
@@ -67,7 +68,7 @@ fun AppScaffold() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Route.Inventory.path,
+            startDestination = "splash",
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Route.Inventory.path) { InventoryScreen() }
@@ -75,6 +76,15 @@ fun AppScaffold() {
             composable(Route.Map.path) { MapScreen() }
             composable(Route.Reservations.path) { ReservationsScreen() }
             composable(Route.Sales.path) { SalesScreen() }
+            composable("splash") {
+                SplashScreen(
+                    onFinish = {
+                        navController.navigate("inventory") {
+                            popUpTo("splash") { inclusive = true }
+                        }
+                    }
+                )
+            }
         }
     }
 }

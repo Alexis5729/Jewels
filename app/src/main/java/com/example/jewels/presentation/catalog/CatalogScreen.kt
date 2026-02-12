@@ -1,76 +1,62 @@
 package com.example.jewels.presentation.catalog
 
-import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.room.withTransaction
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.room.withTransaction
 import coil.compose.AsyncImage
 import com.example.jewels.data.local.db.DbProvider
 import com.example.jewels.data.local.entity.InterestEntity
 import com.example.jewels.data.local.entity.InterestStatus
 import com.example.jewels.data.local.entity.ProductStatus
+import com.example.jewels.presentation.components.NaoluxHeader
+import com.example.jewels.presentation.components.premium.GoldButton
+import com.example.jewels.presentation.components.premium.PremiumCard
+import com.example.jewels.presentation.premium.PremiumStatusChip
 import com.example.jewels.presentation.reservations.AddInterestDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import android.widget.Toast
-import androidx.compose.foundation.background
-import com.example.jewels.presentation.components.NaoluxHeader
 
 private enum class CatalogFilter { ALL, AVAILABLE, SOLD_OUT }
 
 @Composable
 fun CatalogScreen() {
     val context = LocalContext.current
-    val db = remember { DbProvider.get(context) }   // ✅ misma instancia en toda la app
-    val dao = remember { db.productDao() }
-
-    val interestDao = remember { db.interestDao() }  // o DbProvider.get(context).interestDao()
+    val db = remember { DbProvider.get(context) }
+    val productDao = remember { db.productDao() }
+    val interestDao = remember { db.interestDao() }
     val scope = rememberCoroutineScope()
 
     var showInterestDialog by remember { mutableStateOf(false) }
     var selectedProductId by remember { mutableStateOf<Long?>(null) }
-    var selectedProductName by remember { mutableStateOf("") }
-    val snackbarHostState = remember { SnackbarHostState() }
 
     var filter by remember { mutableStateOf(CatalogFilter.ALL) }
 
     val products by when (filter) {
         CatalogFilter.ALL ->
-            dao.observeAllWithPhotos().collectAsState(initial = emptyList())
+            productDao.observeAllWithPhotos().collectAsState(initial = emptyList())
 
         CatalogFilter.AVAILABLE ->
-            dao.observeByStatusWithPhotos(ProductStatus.AVAILABLE).collectAsState(initial = emptyList())
+            productDao.observeByStatusWithPhotos(ProductStatus.AVAILABLE).collectAsState(initial = emptyList())
 
         CatalogFilter.SOLD_OUT ->
-            dao.observeByStatusWithPhotos(ProductStatus.SOLD_OUT).collectAsState(initial = emptyList())
+            productDao.observeByStatusWithPhotos(ProductStatus.SOLD_OUT).collectAsState(initial = emptyList())
     }
 
     Column(
@@ -105,106 +91,229 @@ fun CatalogScreen() {
         Spacer(Modifier.height(12.dp))
 
         if (products.isEmpty()) {
-            Text("No hay productos para este filtro.")
+            PremiumCard(modifier = Modifier.fillMaxWidth()) {
+                Text("No hay productos para este filtro.", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Prueba otro filtro o agrega productos desde Inventario.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         } else {
-            products.forEach { item ->
-                val p = item.product
-                val photos = item.photos
-                val thumb = photos.firstOrNull()?.uri
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(products, key = { it.product.id }) { item ->
+                    val p = item.product
+                    val photoUris = item.photos
+                        .map { it.uri }
+                        .filter { it.isNotBlank() }     // ✅ evita strings vacíos
+                    val thumb = photoUris.firstOrNull()
 
-                ElevatedCard(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    val canReserve = (p.status == ProductStatus.AVAILABLE && p.stock > 0)
 
-                        // Miniatura a la izquierda (si hay)
-                        if (thumb != null) {
-                            AsyncImage(
-                                model = Uri.parse(thumb),
-                                contentDescription = null,
-                                modifier = Modifier.size(56.dp)
-                            )
-                            Spacer(Modifier.width(12.dp))
+                    CatalogProductCard(
+                        name = p.name,
+                        description = p.description,
+                        priceClp = p.priceClp,
+                        stock = p.stock,
+                        status = p.status,
+                        photoUris = photoUris,
+                        thumbUri = thumb,
+                        canReserve = canReserve,
+                        onReserve = {
+                            selectedProductId = p.id
+                            showInterestDialog = true
                         }
-
-                        Column(Modifier.weight(1f)) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(p.name, style = MaterialTheme.typography.titleMedium)
-                                AssistChip(
-                                    onClick = {},
-                                    label = { Text(if (p.status == ProductStatus.AVAILABLE) "Disponible" else "Agotado") }
-                                )
-                            }
-
-                            if (p.description.isNotBlank()) {
-                                Spacer(Modifier.height(4.dp))
-                                Text(p.description)
-                            }
-
-                            Spacer(Modifier.height(6.dp))
-                            Text("Precio: $${p.priceClp} CLP")
-                        }
-                    }
+                    )
                 }
-                Spacer(Modifier.height(10.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        selectedProductId = p.id
-                        selectedProductName = p.name
-                        showInterestDialog = true
-                    },
-                    enabled = (p.status == ProductStatus.AVAILABLE && p.stock > 0)
-                ) {
-                    Text(if (p.stock > 0 && p.status == ProductStatus.AVAILABLE) "Reservar" else "No disponible")
-                }
-
             }
         }
     }
+
     if (showInterestDialog && selectedProductId != null) {
+        val productId = selectedProductId!!
+
         AddInterestDialog(
             onDismiss = { showInterestDialog = false },
             onSave = { name, phone, note ->
                 scope.launch(Dispatchers.IO) {
                     db.withTransaction {
-
-                        // 1) intentar descontar stock
-                        val updatedRows = dao.decrementStockIfAvailable(selectedProductId!!)
+                        val updatedRows = productDao.decrementStockIfAvailable(productId)
 
                         if (updatedRows == 1) {
-                            // 2) crear reserva SOLO si había stock
                             interestDao.insert(
                                 InterestEntity(
-                                    productId = selectedProductId!!,
+                                    productId = productId,
                                     buyerName = name,
                                     phone = phone,
                                     note = note,
                                     status = InterestStatus.PENDING
                                 )
                             )
-
-                            // 3) si llegó a 0, marcar SOLD_OUT
-                            dao.markSoldOutIfNoStock(selectedProductId!!)
+                            productDao.markSoldOutIfNoStock(productId)
                         } else {
                             scope.launch(Dispatchers.Main) {
                                 Toast.makeText(context, "Sin stock disponible", Toast.LENGTH_SHORT).show()
                             }
-                            // no había stock → no crear reserva
-                            // (si quieres, aquí mostramos mensaje después)
                         }
                     }
                 }
                 showInterestDialog = false
             }
         )
-    }}
+    }
+}
+
+@Composable
+private fun CatalogProductCard(
+    name: String,
+    description: String,
+    priceClp: Int,
+    stock: Int,
+    status: ProductStatus,
+    photoUris: List<String>,
+    thumbUri: String?,
+    canReserve: Boolean,
+    onReserve: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+    var showGallery by remember { mutableStateOf(false) }
+
+    val emphasized = (status == ProductStatus.AVAILABLE && stock > 0)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) // ✅ dorado sutil
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f))
+                        .clickable(enabled = photoUris.isNotEmpty()) { showGallery = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!thumbUri.isNullOrBlank()) {
+                        AsyncImage(
+                            model = thumbUri, // ✅ SIN Uri.parse()
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(14.dp))
+
+                Column(Modifier.weight(1f)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = name,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        PremiumStatusChip(
+                            text = if (emphasized) "Disponible" else "Agotado",
+                            emphasized = emphasized
+                        )
+                    }
+
+                    if (description.isNotBlank()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "$$priceClp CLP",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        GoldButton(
+                            text = if (canReserve) "Reservar" else "No disponible",
+                            onClick = onReserve,
+                            enabled = canReserve
+                        )
+                    }
+                }
+            }
+
+            // Precio + meta
+
+            Text(
+                text = "Stock: $stock",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+            )
+
+        }
+    }
+
+    // Galería
+    if (showGallery) {
+        Dialog(onDismissRequest = { showGallery = false }) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                shape = MaterialTheme.shapes.extraLarge,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(name, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Fotos: ${photoUris.size}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(photoUris, key = { it }) { uriStr ->
+                            AsyncImage(
+                                model = uriStr, // ✅ SIN Uri.parse()
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(240.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                            )
+                        }
+                    }
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { showGallery = false }) { Text("Cerrar") }
+                    }
+                }
+            }
+        }
+    }
+}

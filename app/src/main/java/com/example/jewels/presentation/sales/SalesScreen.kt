@@ -1,25 +1,31 @@
 package com.example.jewels.presentation.sales
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
 import com.example.jewels.data.local.db.DbProvider
 import com.example.jewels.data.local.entity.InterestStatus
 import com.example.jewels.data.local.model.SaleWithProduct
 import com.example.jewels.presentation.components.NaoluxHeader
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Calendar
-import java.util.Locale
+import com.example.jewels.presentation.components.premium.GoldOutlineButton
+import com.example.jewels.presentation.components.premium.PremiumCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 private enum class SalesFilter { ALL, TODAY, LAST_7, LAST_30 }
 
@@ -28,7 +34,6 @@ fun SalesScreen() {
     val context = LocalContext.current
     val db = remember { DbProvider.get(context) }
     val saleDao = remember { db.saleDao() }
-    val productDao = remember { db.productDao() }
     val interestDao = remember { db.interestDao() }
     val scope = rememberCoroutineScope()
 
@@ -43,10 +48,20 @@ fun SalesScreen() {
     val from30 = remember(now) { now - 30L * 24 * 60 * 60 * 1000 }
 
     val sales by when (filter) {
-        SalesFilter.ALL -> saleDao.observeAllWithProduct().collectAsState(initial = emptyList())
-        SalesFilter.TODAY -> saleDao.observeBetweenWithProduct(fromToday, System.currentTimeMillis()).collectAsState(initial = emptyList())
-        SalesFilter.LAST_7 -> saleDao.observeBetweenWithProduct(from7, System.currentTimeMillis()).collectAsState(initial = emptyList())
-        SalesFilter.LAST_30 -> saleDao.observeBetweenWithProduct(from30, System.currentTimeMillis()).collectAsState(initial = emptyList())
+        SalesFilter.ALL ->
+            saleDao.observeAllWithProduct().collectAsState(initial = emptyList())
+
+        SalesFilter.TODAY ->
+            saleDao.observeBetweenWithProduct(fromToday, System.currentTimeMillis())
+                .collectAsState(initial = emptyList())
+
+        SalesFilter.LAST_7 ->
+            saleDao.observeBetweenWithProduct(from7, System.currentTimeMillis())
+                .collectAsState(initial = emptyList())
+
+        SalesFilter.LAST_30 ->
+            saleDao.observeBetweenWithProduct(from30, System.currentTimeMillis())
+                .collectAsState(initial = emptyList())
     }
 
     val totalClp = remember(sales) { sales.sumOf { it.priceClp } }
@@ -60,7 +75,7 @@ fun SalesScreen() {
         NaoluxHeader("Ventas")
         Spacer(Modifier.height(12.dp))
 
-        // Filtro
+        // ---- Filtro ----
         SingleChoiceSegmentedButtonRow {
             SegmentedButton(
                 selected = filter == SalesFilter.ALL,
@@ -89,97 +104,199 @@ fun SalesScreen() {
 
         Spacer(Modifier.height(12.dp))
 
-        // Resumen
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("Total ventas: ${sales.size}")
-                Text("Total: $${totalClp} CLP")
+        // ---- Resumen premium ----
+        PremiumCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "Total ventas",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${sales.size}",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Total (CLP)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "$$totalClp",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
         if (sales.isEmpty()) {
-            Text("Aún no hay ventas registradas para este filtro.")
+            PremiumCard(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Aún no hay ventas registradas.",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Cuando registres una venta desde Reservas, aparecerá aquí.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         } else {
-            LazyColumn {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(sales, key = { it.id }) { s ->
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp)
-                    ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(s.buyerName, style = MaterialTheme.typography.titleMedium)
-                            Text("Producto: ${s.productName}")
-                            Text("Tel: ${s.phone}")
-                            if (s.note.isNotBlank()) Text("Nota: ${s.note}")
-                            Spacer(Modifier.height(6.dp))
-                            Text("Precio: $${s.priceClp} CLP")
-                            Text("Fecha: ${formatDate(s.createdAt)}")
-
-                            Spacer(Modifier.height(10.dp))
-
-                            OutlinedButton(
-                                onClick = {
-                                    deleteTarget = s
-                                    confirmDeleteOpen = true
-                                }
-                            ) {
-                                Text("Eliminar")
-                            }
+                    SaleCard(
+                        sale = s,
+                        onDelete = {
+                            deleteTarget = s
+                            confirmDeleteOpen = true
                         }
-                    }
+                    )
                 }
             }
+        }
+    }
 
-            if (confirmDeleteOpen && deleteTarget != null) {
-                val s = deleteTarget!!
-                AlertDialog(
-                    onDismissRequest = {
-                        confirmDeleteOpen = false
-                        deleteTarget = null
-                    },
-                    title = { Text("Eliminar venta") },
-                    text = {
-                        Text(
-                            "¿Seguro que quieres eliminar esta venta?\n\n" +
-                                    "Cliente: ${s.buyerName}\n" +
-                                    "Producto: ${s.productName}\n" +
-                                    "Precio: $${s.priceClp} CLP\n\n" +
-                                    "Esto ajustará el total mostrado en Ventas."
-                        )
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                scope.launch(Dispatchers.IO) {
-                                    db.withTransaction {
+    // ---- Confirmación eliminar ----
+    if (confirmDeleteOpen && deleteTarget != null) {
+        val s = deleteTarget!!
 
-                                        // 1) borrar venta
-                                        saleDao.deleteById(s.id)
+        AlertDialog(
+            onDismissRequest = {
+                confirmDeleteOpen = false
+                deleteTarget = null
+            },
+            title = { Text("Eliminar venta") },
+            text = {
+                Text(
+                    "¿Seguro que quieres eliminar esta venta?\n\n" +
+                            "Cliente: ${s.buyerName}\n" +
+                            "Producto: ${s.productName}\n" +
+                            "Precio: $${s.priceClp} CLP\n\n" +
+                            "Esto ajustará el total mostrado en Ventas."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            db.withTransaction {
+                                // 1) borrar venta
+                                saleDao.deleteById(s.id)
 
-                                        // 2) reabrir reserva (NO borrarla)
-                                        s.interestId?.let { interestId ->
-                                            interestDao.updateStatus(interestId, InterestStatus.CONTACTED)
-                                            // o PENDING si prefieres
-                                        }
-                                    }
+                                // 2) reabrir reserva (si existe)
+                                s.interestId?.let { interestId ->
+                                    interestDao.updateStatus(interestId, InterestStatus.CONTACTED)
                                 }
                             }
-                        ) { Text("Sí, eliminar") }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                confirmDeleteOpen = false
-                                deleteTarget = null
-                            }
-                        ) { Text("Cancelar") }
+                        }
+                        confirmDeleteOpen = false
+                        deleteTarget = null
                     }
+                ) { Text("Sí, eliminar") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        confirmDeleteOpen = false
+                        deleteTarget = null
+                    }
+                ) { Text("Cancelar") }
+            }
+        )
+    }
+}
+
+@Composable
+private fun SaleCard(
+    sale: SaleWithProduct,
+    onDelete: () -> Unit
+) {
+    val shape = RoundedCornerShape(22.dp)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = shape,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+        ),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f) // dorado sutil
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = sale.buyerName,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "Producto: ${sale.productName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                Text(
+                    text = "$${sale.priceClp} CLP",
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
 
+            Text(
+                text = "Tel: ${sale.phone}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+
+            if (sale.note.isNotBlank()) {
+                Text(
+                    text = sale.note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Text(
+                text = "Fecha: ${formatDate(sale.createdAt)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                GoldOutlineButton(
+                    text = "Eliminar",
+                    onClick = onDelete
+                )
+            }
         }
     }
 }

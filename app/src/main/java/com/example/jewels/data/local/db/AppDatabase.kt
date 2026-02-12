@@ -21,7 +21,7 @@ import com.example.jewels.data.local.entity.SaleEntity
         InterestEntity::class,
         SaleEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
